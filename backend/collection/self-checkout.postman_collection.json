@@ -1,0 +1,323 @@
+{
+  "info": {
+    "name": "Self-Checkout API",
+    "description": "Requests for every endpoint of the self-checkout snack bar API, grouped by domain.\n\nSetup: run `docker-compose up -d --build` from the repo root, then import this collection. Update the collection variables (especially the id values) to match your seeded data.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "categoryId", "value": "1" },
+    { "key": "itemId", "value": "1" },
+    { "key": "optionGroupId", "value": "1" },
+    { "key": "optionId", "value": "1" },
+    { "key": "orderId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Get root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Liveness check — returns a hello message if the API is up.",
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Menu",
+      "item": [
+        {
+          "name": "Get full menu",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Full menu: categories (sorted), items (with price + stock), and each item's option groups and options. Used by both the customer kiosk and the admin.",
+            "url": {
+              "raw": "{{baseUrl}}/menu",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Checkout",
+      "item": [
+        {
+          "name": "Submit order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Create an order. `idempotency_key` must be unique per ordering session (the kiosk generates one at Start); a repeat with the same key returns the existing order instead of a duplicate. The example is 2x Coffee with almond milk (option id 2, +50¢): total = 2 × (300 + 50) = 700.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"a-unique-uuid-per-session\",\n  \"items\": [\n    { \"item_id\": 1, \"quantity\": 2, \"options\": [2] }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["checkout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "Create category",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Create a category. Lower `sort_order` shows first on the display.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Drinks\",\n  \"description\": \"Cold and hot drinks\",\n  \"sort_order\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Update category",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Partial update — only the fields sent are changed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Beverages\",\n  \"sort_order\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu/categories/{{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "categories", "{{categoryId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "Delete a category. Returns 409 if it still has items.",
+            "url": {
+              "raw": "{{baseUrl}}/menu/categories/{{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "categories", "{{categoryId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Items",
+      "item": [
+        {
+          "name": "Create item",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Create an item. `price` and `stock` are integers (price in cents). `option_group_ids` attaches option groups to the item.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category_id\": 1,\n  \"name\": \"Coffee\",\n  \"description\": \"Hot brewed coffee\",\n  \"image_url\": null,\n  \"price\": 300,\n  \"stock\": 5,\n  \"option_group_ids\": [1]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "items"]
+            }
+          }
+        },
+        {
+          "name": "Update item",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Partial update. Setting `stock` to 0 marks the item sold out.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 350,\n  \"stock\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu/items/{{itemId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "items", "{{itemId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "Delete an item. Returns 409 if referenced by past orders — set stock to 0 instead.",
+            "url": {
+              "raw": "{{baseUrl}}/menu/items/{{itemId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "items", "{{itemId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Option Groups",
+      "item": [
+        {
+          "name": "Create option group",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Create an option group (e.g. Milk, Size, Sweetener). Attach it to an item via the item's `option_group_ids`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Milk\",\n  \"sort_order\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu/option-groups",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "option-groups"]
+            }
+          }
+        },
+        {
+          "name": "Update option group",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Partial update.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dairy milk\",\n  \"sort_order\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu/option-groups/{{optionGroupId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "option-groups", "{{optionGroupId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete option group",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "Delete an option group. Returns 409 if it still has options.",
+            "url": {
+              "raw": "{{baseUrl}}/menu/option-groups/{{optionGroupId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "option-groups", "{{optionGroupId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Options",
+      "item": [
+        {
+          "name": "Create option",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Create an option inside an option group. `price_delta` is a non-negative upcharge in cents (0 = free).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Almond milk\",\n  \"image_url\": null,\n  \"price_delta\": 50\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu/option-groups/{{optionGroupId}}/options",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "option-groups", "{{optionGroupId}}", "options"]
+            }
+          }
+        },
+        {
+          "name": "Update option",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Partial update of an option.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price_delta\": 75\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu/options/{{optionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "options", "{{optionId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete option",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "description": "Delete an option. Returns 409 if referenced by past orders.",
+            "url": {
+              "raw": "{{baseUrl}}/menu/options/{{optionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["menu", "options", "{{optionId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "List orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "List all placed orders, newest first.",
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          }
+        },
+        {
+          "name": "Get order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Full detail of one order: items, quantities, unit prices, and chosen options.",
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

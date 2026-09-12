@@ -1,2 +1,15 @@
 .idea
 .claude
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+backend/.venv/
+
+# Env
+.env
+backend/.env
+
+# uv
+backend/.python-version

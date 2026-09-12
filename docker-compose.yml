@@ -1,0 +1,9 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: selfcheckout
+      POSTGRES_PASSWORD: selfcheckout
+      POSTGRES_DB: selfcheckout
+    ports:
+      - "5432:5432"

@@ -137,7 +137,8 @@ afterthought.
   plus the admin endpoints. **FastAPI** (over Flask/Django): async, Pydantic
   request validation for free, auto-generated OpenAPI docs.
 - **Database (PostgreSQL)** — stores the menu (categories, items, prices,
-  stock) and submitted orders.
+  stock) and submitted orders. Schema managed with **SQLAlchemy** (models +
+  ORM) and **Alembic** (migrations).
 - **Docker / docker-compose** — run PostgreSQL (and the API) locally without
   installing anything, and to match prod parity.
 

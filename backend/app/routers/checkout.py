@@ -1,7 +1,9 @@
+from collections import Counter
 from datetime import datetime, time, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -23,18 +25,31 @@ def checkout(payload: CheckoutRequest, db: Session = Depends(get_db)):
     if not payload.items:
         raise HTTPException(status_code=400, detail="Order has no items")
 
-    # Re-validate every line against the current menu; never trust the client.
-    order_items: list[tuple[Item, int, list[Option]]] = []
-    total = 0
+    # Aggregate demand per item so a single order can't oversell an item
+    # across multiple lines.
+    demand = Counter()
     for line in payload.items:
-        item = db.get(Item, line.item_id)
+        demand[line.item_id] += line.quantity
+
+    # Load and lock each item (SELECT ... FOR UPDATE) so concurrent checkouts
+    # serialize on the same rows and can't oversell the last unit.
+    items: dict[int, Item] = {}
+    for item_id in demand:
+        item = db.get(Item, item_id, with_for_update=True)
         if item is None:
-            raise HTTPException(status_code=404, detail=f"Item {line.item_id} not found")
-        if item.stock < line.quantity:
+            raise HTTPException(status_code=404, detail=f"Item {item_id} not found")
+        if item.stock < demand[item_id]:
             raise HTTPException(
                 status_code=409,
                 detail=f"Not enough stock for '{item.name}' (only {item.stock} left)",
             )
+        items[item_id] = item
+
+    # Validate options and compute unit prices once (never trust the client).
+    lines: list[tuple[Item, int, list[Option], int]] = []
+    total = 0
+    for line in payload.items:
+        item = items[line.item_id]
 
         options: list[Option] = []
         if line.options:
@@ -47,7 +62,7 @@ def checkout(payload: CheckoutRequest, db: Session = Depends(get_db)):
 
         unit_price = item.price + sum(o.price_delta for o in options)
         total += unit_price * line.quantity
-        order_items.append((item, line.quantity, options))
+        lines.append((item, line.quantity, options, unit_price))
 
     # Per-day order number: count of today's orders + 1.
     today_start = datetime.combine(datetime.now(timezone.utc).date(), time.min, tzinfo=timezone.utc)
@@ -65,13 +80,13 @@ def checkout(payload: CheckoutRequest, db: Session = Depends(get_db)):
     db.add(order)
 
     # Decrement stock and build snapshot lines, all in the same transaction.
-    for item, quantity, options in order_items:
+    for item, quantity, options, unit_price in lines:
         item.stock -= quantity
         order_item = OrderItem(
             item_id=item.id,
             item_name=item.name,
             quantity=quantity,
-            unit_price=item.price + sum(o.price_delta for o in options),
+            unit_price=unit_price,
         )
         order.items.append(order_item)
         for option in options:
@@ -83,6 +98,18 @@ def checkout(payload: CheckoutRequest, db: Session = Depends(get_db)):
                 )
             )
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent request with the same idempotency_key committed first;
+        # roll back our duplicate and return the existing order.
+        db.rollback()
+        existing = db.scalars(
+            select(Order).where(Order.idempotency_key == payload.idempotency_key)
+        ).first()
+        if existing is None:
+            raise
+        return CheckoutResponse(order_number=existing.number, total=existing.total)
+
     db.refresh(order)
     return CheckoutResponse(order_number=order.number, total=order.total)

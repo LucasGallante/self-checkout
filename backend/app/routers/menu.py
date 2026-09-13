@@ -117,6 +117,8 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Item not found")
     if item.order_items:
         raise HTTPException(status_code=409, detail="Item is referenced by past orders")
+    if item.option_groups:
+        raise HTTPException(status_code=409, detail="Item still has option groups")
     db.delete(item)
     db.commit()
 
@@ -149,6 +151,8 @@ def delete_option_group(group_id: int, db: Session = Depends(get_db)):
     group = db.get(OptionGroup, group_id)
     if group is None:
         raise HTTPException(status_code=404, detail="Option group not found")
+    if group.items:
+        raise HTTPException(status_code=409, detail="Option group is still used by items")
     if group.options:
         raise HTTPException(status_code=409, detail="Option group still has options")
     db.delete(group)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, formatPrice } from '../api.js';
 
 const STEPS = ['start', 'browse', 'review', 'pay', 'done'];
@@ -177,11 +177,23 @@ export default function CustomerFlow() {
 }
 
 function Browse({ menu, cart, total, onAdd, onAddWithOptions, onSetOptions, onQuantity, onCheckout, onReset }) {
-  const [activeCategory, setActiveCategory] = useState(null);
+  const [activeId, setActiveId] = useState(menu[0]?.id ?? null);
   const [modalItem, setModalItem] = useState(null);
+  const sectionRefs = useRef({});
 
-  const categories = menu;
-  const current = activeCategory ?? categories[0];
+  function scrollTo(id) {
+    sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function onScroll(e) {
+    const top = e.currentTarget.getBoundingClientRect().top;
+    let current = menu[0]?.id;
+    for (const c of menu) {
+      const el = sectionRefs.current[c.id];
+      if (el && el.getBoundingClientRect().top - top < 120) current = c.id;
+    }
+    setActiveId(current);
+  }
 
   return (
     <div className="browse">
@@ -194,42 +206,53 @@ function Browse({ menu, cart, total, onAdd, onAddWithOptions, onSetOptions, onQu
 
       <div className="browse-body">
         <nav className="category-nav">
-          {categories.map((c) => (
+          {menu.map((c) => (
             <button
               key={c.id}
-              className={`category-tab ${current?.id === c.id ? 'active' : ''}`}
-              onClick={() => setActiveCategory(c)}
+              className={`category-tab ${activeId === c.id ? 'active' : ''}`}
+              onClick={() => scrollTo(c.id)}
             >
               {c.name}
             </button>
           ))}
         </nav>
 
-        <div className="items-grid">
-          {current?.items.map((item) => {
-            const soldOut = item.stock <= 0;
-            return (
-              <button
-                key={item.id}
-                className="item-card"
-                disabled={soldOut}
-                onClick={() => (item.option_groups.length ? setModalItem(item) : onAdd(item))}
-              >
-                <div className="item-img">
-                  {item.image_url ? (
-                    <img src={item.image_url} alt={item.name} loading="lazy" />
-                  ) : (
-                    <div className="placeholder">{item.name[0]}</div>
-                  )}
-                  {soldOut && <span className="soldout-badge">Sold out</span>}
-                </div>
-                <div className="item-info">
-                  <span className="item-name">{item.name}</span>
-                  <span className="item-price">{formatPrice(item.price)}</span>
-                </div>
-              </button>
-            );
-          })}
+        <div className="menu-scroll" onScroll={onScroll}>
+          {menu.map((category) => (
+            <section
+              key={category.id}
+              className="category-section"
+              ref={(el) => (sectionRefs.current[category.id] = el)}
+            >
+              <h2 className="category-title">{category.name}</h2>
+              <div className="items-grid">
+                {category.items.map((item) => {
+                  const soldOut = item.stock <= 0;
+                  return (
+                    <button
+                      key={item.id}
+                      className="item-card"
+                      disabled={soldOut}
+                      onClick={() => (item.option_groups.length ? setModalItem(item) : onAdd(item))}
+                    >
+                      <div className="item-img">
+                        {item.image_url ? (
+                          <img src={item.image_url} alt={item.name} loading="lazy" />
+                        ) : (
+                          <div className="placeholder">{item.name[0]}</div>
+                        )}
+                        {soldOut && <span className="soldout-badge">Sold out</span>}
+                      </div>
+                      <div className="item-info">
+                        <span className="item-name">{item.name}</span>
+                        <span className="item-price">{formatPrice(item.price)}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
 
         <Cart

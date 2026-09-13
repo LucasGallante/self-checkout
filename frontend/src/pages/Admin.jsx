@@ -154,7 +154,9 @@ function MenuManager({ menu, onChanged }) {
                 <div className="row">
                   <button
                     className="btn ghost small"
-                    onClick={() => setEditing({ type: 'item', id: item.id, item })}
+                    onClick={() =>
+                      setEditing({ type: 'item', id: item.id, item, categoryId: category.id })
+                    }
                   >
                     Edit
                   </button>
@@ -280,7 +282,7 @@ function Editor({ editing, menu, optionGroups, busy, onClose, onSave }) {
         image_url: option?.image_url ?? '',
       };
     return {
-      category_id: item?.category_id ?? categoryId ?? '',
+      category_id: categoryId ?? item?.category_id ?? '',
       name: item?.name ?? '',
       description: item?.description ?? '',
       price: centsToDollars(item?.price),
@@ -347,7 +349,10 @@ function Editor({ editing, menu, optionGroups, busy, onClose, onSave }) {
             <Field label="Description" value={form.description} onChange={(v) => set('description', v)} />
             <label className="field">
               Category
-              <select value={form.category_id} onChange={(e) => set('category_id', e.target.value)}>
+              <select
+                value={String(form.category_id ?? '')}
+                onChange={(e) => set('category_id', e.target.value)}
+              >
                 <option value="">Select…</option>
                 {menu.map((c) => (
                   <option key={c.id} value={c.id}>

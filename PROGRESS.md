@@ -7,3 +7,4 @@
 - Dockerized the frontend (nginx) so a single `docker-compose up` runs the whole app.
 - Polished the frontend: scrollable menu, responsive kiosk layout, full admin CRUD (incl. options), and fixed price/category bugs.
 - Hardened the backend: fixed oversell/idempotency races, 500-on-delete, and added a pytest suite (29 tests, incl. concurrency).
+- Expanded the test suite to 45 tests (~98% coverage), and made order history independent of the menu (snapshot-only, no item/option FKs).

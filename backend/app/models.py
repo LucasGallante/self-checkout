@@ -49,7 +49,6 @@ class Item(Base):
     option_groups: Mapped[list["OptionGroup"]] = relationship(
         secondary=item_option_group, back_populates="items"
     )
-    order_items: Mapped[list["OrderItem"]] = relationship(back_populates="item")
 
 
 class OptionGroup(Base):
@@ -75,7 +74,6 @@ class Option(Base):
     price_delta: Mapped[int] = mapped_column(default=0)  # non-negative upcharge
 
     option_group: Mapped["OptionGroup"] = relationship(back_populates="options")
-    order_item_options: Mapped[list["OrderItemOption"]] = relationship(back_populates="option")
 
 
 class Order(Base):
@@ -98,13 +96,14 @@ class OrderItem(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
-    item_id: Mapped[int] = mapped_column(ForeignKey("items.id"))
+    # item_id is a plain reference, NOT a foreign key: the order must survive the
+    # item being deleted from the menu. The snapshot columns carry the display.
+    item_id: Mapped[int] = mapped_column()
     item_name: Mapped[str] = mapped_column(String(100))  # snapshot at order time
     quantity: Mapped[int] = mapped_column()
     unit_price: Mapped[int] = mapped_column()  # snapshot: item price + option deltas
 
     order: Mapped["Order"] = relationship(back_populates="items")
-    item: Mapped["Item"] = relationship(back_populates="order_items")
     options: Mapped[list["OrderItemOption"]] = relationship(back_populates="order_item")
 
 
@@ -113,9 +112,9 @@ class OrderItemOption(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"))
-    option_id: Mapped[int] = mapped_column(ForeignKey("options.id"))
+    # option_id is a plain reference, NOT a foreign key (same reason as item_id).
+    option_id: Mapped[int] = mapped_column()
     option_name: Mapped[str] = mapped_column(String(100))  # snapshot
     price_delta: Mapped[int] = mapped_column(default=0)  # snapshot
 
     order_item: Mapped["OrderItem"] = relationship(back_populates="options")
-    option: Mapped["Option"] = relationship(back_populates="order_item_options")

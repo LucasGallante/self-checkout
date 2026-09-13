@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
@@ -115,8 +115,6 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
     item = db.get(Item, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    if item.order_items:
-        raise HTTPException(status_code=409, detail="Item is referenced by past orders")
     if item.option_groups:
         raise HTTPException(status_code=409, detail="Item still has option groups")
     db.delete(item)
@@ -186,12 +184,10 @@ def update_option(option_id: int, payload: OptionUpdate, db: Session = Depends(g
 
 @router.delete("/options/{option_id}", status_code=204)
 def delete_option(option_id: int, db: Session = Depends(get_db)):
-    option = db.get(Option, option_id)
-    if option is None:
+    result = db.execute(delete(Option).where(Option.id == option_id))
+    if result.rowcount == 0:
+        db.rollback()
         raise HTTPException(status_code=404, detail="Option not found")
-    if option.order_item_options:
-        raise HTTPException(status_code=409, detail="Option is referenced by past orders")
-    db.delete(option)
     db.commit()
 
 

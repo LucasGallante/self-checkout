@@ -12,6 +12,15 @@ from app.schemas import CheckoutRequest, CheckoutResponse
 
 router = APIRouter(tags=["checkout"])
 
+# Advisory lock key: serializes per-day order-number assignment so concurrent
+# checkouts can't compute the same `number`.
+_ORDER_NUMBER_LOCK = 7919
+
+
+def compute_unit_price(item_price: int, options: list[Option]) -> int:
+    """Item price + the sum of selected option deltas (integer cents)."""
+    return item_price + sum(o.price_delta for o in options)
+
 
 @router.post("/checkout", response_model=CheckoutResponse, status_code=201)
 def checkout(payload: CheckoutRequest, db: Session = Depends(get_db)):
@@ -37,8 +46,10 @@ def checkout(payload: CheckoutRequest, db: Session = Depends(get_db)):
     for item_id in demand:
         item = db.get(Item, item_id, with_for_update=True)
         if item is None:
+            db.rollback()
             raise HTTPException(status_code=404, detail=f"Item {item_id} not found")
         if item.stock < demand[item_id]:
+            db.rollback()
             raise HTTPException(
                 status_code=409,
                 detail=f"Not enough stock for '{item.name}' (only {item.stock} left)",
@@ -55,16 +66,21 @@ def checkout(payload: CheckoutRequest, db: Session = Depends(get_db)):
         if line.options:
             options = db.scalars(select(Option).where(Option.id.in_(line.options))).all()
             if len(options) != len(set(line.options)):
+                db.rollback()
                 raise HTTPException(status_code=404, detail="Option not found")
             allowed = {g.id for g in item.option_groups}
             if any(o.option_group_id not in allowed for o in options):
+                db.rollback()
                 raise HTTPException(status_code=400, detail="Option does not belong to this item")
 
-        unit_price = item.price + sum(o.price_delta for o in options)
+        unit_price = compute_unit_price(item.price, options)
         total += unit_price * line.quantity
         lines.append((item, line.quantity, options, unit_price))
 
-    # Per-day order number: count of today's orders + 1.
+    # Per-day order number, assigned atomically via an advisory lock so two
+    # concurrent checkouts can't compute the same number. The "day" boundary is
+    # UTC (deliberate: the demo's day reset happens at UTC midnight).
+    db.execute(select(func.pg_advisory_xact_lock(_ORDER_NUMBER_LOCK)))
     today_start = datetime.combine(datetime.now(timezone.utc).date(), time.min, tzinfo=timezone.utc)
     count_today = db.scalar(
         select(func.count()).select_from(Order).where(Order.created_at >= today_start)

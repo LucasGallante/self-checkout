@@ -112,7 +112,7 @@ class CheckoutItem(BaseModel):
 
 
 class CheckoutRequest(BaseModel):
-    idempotency_key: str = Field(min_length=1)
+    idempotency_key: str = Field(min_length=1, max_length=36)
     items: list[CheckoutItem]
 
 

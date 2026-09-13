@@ -1,7 +1,9 @@
 import threading
 
-from app.models import Order, OrderItem
-from app.routers.checkout import checkout
+from pydantic import ValidationError
+
+from app.models import Order
+from app.routers.checkout import checkout, compute_unit_price
 from app.schemas import CheckoutRequest
 from tests.conftest import TestingSessionLocal
 from tests.helpers import make_category, make_item, make_option, make_option_group
@@ -186,3 +188,64 @@ def test_duplicate_key_concurrency(db):
     assert all(code == 201 for code, _, _ in results.values())
     bodies = [(num, total) for _, num, total in results.values()]
     assert bodies[0] == bodies[1]
+
+
+# ---- Unit tests (no DB) ----
+
+
+def _option(price_delta):
+    class O:
+        pass
+
+    o = O()
+    o.price_delta = price_delta
+    return o
+
+
+def test_compute_unit_price():
+    assert compute_unit_price(300, []) == 300
+    assert compute_unit_price(300, [_option(50)]) == 350
+    assert compute_unit_price(300, [_option(50), _option(100)]) == 450
+    assert compute_unit_price(300, [_option(0)]) == 300
+
+
+def test_checkout_schema_validation():
+    # valid
+    CheckoutRequest(idempotency_key="k", items=[{"item_id": 1, "quantity": 1}])
+
+    # quantity must be > 0
+    try:
+        CheckoutRequest(idempotency_key="k", items=[{"item_id": 1, "quantity": 0}])
+        assert False, "expected ValidationError for quantity <= 0"
+    except ValidationError:
+        pass
+
+    # empty idempotency_key
+    try:
+        CheckoutRequest(idempotency_key="", items=[{"item_id": 1, "quantity": 1}])
+        assert False, "expected ValidationError for empty key"
+    except ValidationError:
+        pass
+
+    # >36-char key (after #6)
+    try:
+        CheckoutRequest(idempotency_key="x" * 37, items=[{"item_id": 1, "quantity": 1}])
+        assert False, "expected ValidationError for >36-char key"
+    except ValidationError:
+        pass
+
+
+def test_price_schemas_reject_negatives():
+    from app.schemas import ItemCreate, OptionCreate
+
+    try:
+        ItemCreate(category_id=1, name="x", price=-1)
+        assert False, "expected ValidationError for negative price"
+    except ValidationError:
+        pass
+
+    try:
+        OptionCreate(name="x", price_delta=-1)
+        assert False, "expected ValidationError for negative price_delta"
+    except ValidationError:
+        pass

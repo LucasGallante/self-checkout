@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatPrice } from '../api.js';
+
+// Money is stored in the DB as integer cents. Forms hold dollars as a string
+// (e.g. "6.50"); we convert cents<->dollars only at the boundary.
+const centsToDollars = (cents) => ((cents ?? 0) / 100).toFixed(2);
+const dollarsToCents = (dollars) => Math.round((parseFloat(dollars) || 0) * 100);
 
 export default function Admin() {
   const [tab, setTab] = useState('menu');
@@ -55,8 +60,18 @@ export default function Admin() {
 }
 
 function MenuManager({ menu, onChanged }) {
-  const [editing, setEditing] = useState(null); // {type, item, group}
+  const [editing, setEditing] = useState(null); // {type, ...}
   const [busy, setBusy] = useState(false);
+
+  // Every option group that is attached to at least one item.
+  const optionGroups = useMemo(
+    () => [
+      ...new Map(
+        menu.flatMap((c) => c.items).flatMap((i) => i.option_groups).map((g) => [g.id, g]),
+      ).values(),
+    ],
+    [menu],
+  );
 
   async function run(fn) {
     setBusy(true);
@@ -69,6 +84,22 @@ function MenuManager({ menu, onChanged }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function save(payload, type, target) {
+    const calls = {
+      category: target.id
+        ? () => api.updateCategory(target.id, payload)
+        : () => api.createCategory(payload),
+      group: target.id
+        ? () => api.updateOptionGroup(target.id, payload)
+        : () => api.createOptionGroup(payload),
+      option: target.id
+        ? () => api.updateOption(target.id, payload)
+        : () => api.createOption(target.groupId, payload),
+      item: target.id ? () => api.updateItem(target.id, payload) : () => api.createItem(payload),
+    };
+    return run(calls[type]);
   }
 
   return (
@@ -89,7 +120,7 @@ function MenuManager({ menu, onChanged }) {
             <div className="row">
               <button
                 className="btn ghost small"
-                onClick={() => setEditing({ type: 'category', item: category })}
+                onClick={() => setEditing({ type: 'category', id: category.id, item: category })}
               >
                 Edit
               </button>
@@ -121,7 +152,10 @@ function MenuManager({ menu, onChanged }) {
                   </span>
                 </div>
                 <div className="row">
-                  <button className="btn ghost small" onClick={() => setEditing({ type: 'item', item })}>
+                  <button
+                    className="btn ghost small"
+                    onClick={() => setEditing({ type: 'item', id: item.id, item })}
+                  >
                     Edit
                   </button>
                   <button
@@ -137,37 +171,119 @@ function MenuManager({ menu, onChanged }) {
         </section>
       ))}
 
+      <section className="admin-category">
+        <div className="admin-category-head">
+          <h2>Option groups</h2>
+        </div>
+        {optionGroups.length === 0 ? (
+          <p className="muted">No option groups yet — create one, then attach it to an item.</p>
+        ) : (
+          optionGroups.map((group) => {
+            const usedBy = menu
+              .flatMap((c) => c.items)
+              .filter((i) => i.option_groups.some((g) => g.id === group.id))
+              .map((i) => i.name);
+            return (
+              <div key={group.id} className="option-group-manager">
+                <div className="option-group-head">
+                  <div>
+                    <h3>{group.name}</h3>
+                    <span className="muted small">
+                      {group.options.length} option{group.options.length !== 1 && 's'}
+                      {usedBy.length > 0 && ` · on ${usedBy.join(', ')}`}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <button
+                      className="btn ghost small"
+                      onClick={() => setEditing({ type: 'option', groupId: group.id })}
+                    >
+                      Add option
+                    </button>
+                    <button
+                      className="btn ghost small"
+                      onClick={() => setEditing({ type: 'group', id: group.id, group })}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      className="btn ghost small danger"
+                      onClick={() => run(() => api.deleteOptionGroup(group.id))}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                {group.options.length === 0 ? (
+                  <p className="muted small">No options yet.</p>
+                ) : (
+                  <ul className="admin-items">
+                    {group.options.map((option) => (
+                      <li key={option.id} className="admin-item">
+                        {option.image_url && <img src={option.image_url} alt="" width={40} height={40} />}
+                        <div className="admin-item-info">
+                          <strong>{option.name}</strong>
+                          <span className="muted">
+                            {option.price_delta > 0 ? `+${formatPrice(option.price_delta)}` : 'free'}
+                          </span>
+                        </div>
+                        <div className="row">
+                          <button
+                            className="btn ghost small"
+                            onClick={() =>
+                              setEditing({ type: 'option', id: option.id, groupId: group.id, option })
+                            }
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="btn ghost small danger"
+                            onClick={() => run(() => api.deleteOption(option.id))}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })
+        )}
+      </section>
+
       {editing && (
         <Editor
           editing={editing}
           menu={menu}
+          optionGroups={optionGroups}
           busy={busy}
           onClose={() => setEditing(null)}
-          onSave={(payload, type, id) => {
-            const calls = {
-              category: id ? () => api.updateCategory(id, payload) : () => api.createCategory(payload),
-              item: id ? () => api.updateItem(id, payload) : () => api.createItem(payload),
-              group: id ? () => api.updateOptionGroup(id, payload) : () => api.createOptionGroup(payload),
-            };
-            return run(calls[type]);
-          }}
+          onSave={save}
         />
       )}
     </div>
   );
 }
 
-function Editor({ editing, menu, busy, onClose, onSave }) {
-  const { type, item, group, categoryId } = editing;
+function Editor({ editing, menu, optionGroups, busy, onClose, onSave }) {
+  const { type, item, group, option, categoryId } = editing;
   const [form, setForm] = useState(() => {
     if (type === 'category')
       return { name: item?.name ?? '', description: item?.description ?? '', sort_order: item?.sort_order ?? 0 };
     if (type === 'group') return { name: group?.name ?? '', sort_order: group?.sort_order ?? 0 };
+    if (type === 'option')
+      return {
+        name: option?.name ?? '',
+        price_delta: centsToDollars(option?.price_delta),
+        image_url: option?.image_url ?? '',
+      };
     return {
       category_id: item?.category_id ?? categoryId ?? '',
       name: item?.name ?? '',
       description: item?.description ?? '',
-      price: item?.price ?? 0,
+      price: centsToDollars(item?.price),
       stock: item?.stock ?? 0,
       image_url: item?.image_url ?? '',
       option_group_ids: item?.option_groups?.map((g) => g.id) ?? [],
@@ -181,24 +297,20 @@ function Editor({ editing, menu, busy, onClose, onSave }) {
   function toPayload() {
     if (type === 'category') return { ...form, sort_order: Number(form.sort_order) };
     if (type === 'group') return { ...form, sort_order: Number(form.sort_order) };
+    if (type === 'option') return { ...form, price_delta: dollarsToCents(form.price_delta) };
     return {
       ...form,
       category_id: Number(form.category_id),
-      price: Math.round(Number(form.price) * 100),
+      price: dollarsToCents(form.price),
       stock: Number(form.stock),
       option_group_ids: form.option_group_ids.map(Number),
     };
   }
 
-  const allGroups = [
-    ...new Map(
-      menu.flatMap((c) => c.items).flatMap((i) => i.option_groups).map((g) => [g.id, g]),
-    ).values(),
-  ];
-
   const title =
     type === 'category' ? (item ? 'Edit category' : 'New category') :
     type === 'group' ? (group ? 'Edit option group' : 'New option group') :
+    type === 'option' ? (option ? 'Edit option' : 'New option') :
     item ? 'Edit item' : 'New item';
 
   return (
@@ -221,6 +333,14 @@ function Editor({ editing, menu, busy, onClose, onSave }) {
           </>
         )}
 
+        {type === 'option' && (
+          <>
+            <Field label="Name" value={form.name} onChange={(v) => set('name', v)} />
+            <Field label="Upcharge ($)" type="number" step="0.01" value={form.price_delta} onChange={(v) => set('price_delta', v)} />
+            <Field label="Image URL" value={form.image_url} onChange={(v) => set('image_url', v)} />
+          </>
+        )}
+
         {type === 'item' && (
           <>
             <Field label="Name" value={form.name} onChange={(v) => set('name', v)} />
@@ -236,18 +356,12 @@ function Editor({ editing, menu, busy, onClose, onSave }) {
                 ))}
               </select>
             </label>
-            <Field
-              label="Price ($)"
-              type="number"
-              step="0.01"
-              value={form.price / 100}
-              onChange={(v) => set('price', v)}
-            />
+            <Field label="Price ($)" type="number" step="0.01" value={form.price} onChange={(v) => set('price', v)} />
             <Field label="Stock" type="number" value={form.stock} onChange={(v) => set('stock', v)} />
             <Field label="Image URL" value={form.image_url} onChange={(v) => set('image_url', v)} />
             <div className="field">
               <span className="label">Option groups</span>
-              {allGroups.map((g) => (
+              {optionGroups.map((g) => (
                 <label key={g.id} className="checkbox">
                   <input
                     type="checkbox"
@@ -272,7 +386,7 @@ function Editor({ editing, menu, busy, onClose, onSave }) {
           <button className="btn ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn primary" disabled={busy} onClick={() => onSave(toPayload(), type, item?.id ?? group?.id)}>
+          <button className="btn primary" disabled={busy} onClick={() => onSave(toPayload(), type, editing)}>
             Save
           </button>
         </div>
@@ -316,7 +430,7 @@ function OrdersList({ orders }) {
               <td>{o.number}</td>
               <td>{o.status}</td>
               <td>{formatPrice(o.total)}</td>
-              <td>{new Date(o.created_at).toLocaleTimeString()}</td>
+              <td>{new Date(o.created_at).toLocaleString()}</td>
             </tr>
           ))}
         </tbody>

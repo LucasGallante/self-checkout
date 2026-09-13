@@ -225,6 +225,7 @@ function Browse({ menu, cart, total, onAdd, onAddWithOptions, onSetOptions, onQu
               ref={(el) => (sectionRefs.current[category.id] = el)}
             >
               <h2 className="category-title">{category.name}</h2>
+              {category.description && <p className="category-description">{category.description}</p>}
               <div className="items-grid">
                 {category.items.map((item) => {
                   const soldOut = item.stock <= 0;

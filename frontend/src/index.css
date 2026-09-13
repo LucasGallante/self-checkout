@@ -211,8 +211,14 @@ h2 {
 
 .category-title {
   font-size: 22px;
-  margin: 0 0 16px;
+  margin: 0 0 6px;
   letter-spacing: -0.3px;
+}
+
+.category-description {
+  color: var(--muted);
+  margin: 0 0 16px;
+  font-size: 15px;
 }
 
 .items-grid {
@@ -603,6 +609,32 @@ select:focus {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.option-group-manager {
+  border-top: 1px solid var(--border);
+  padding: 16px 0;
+}
+
+.option-group-manager:first-of-type {
+  border-top: none;
+}
+
+.option-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.option-group-head h3 {
+  margin: 0 0 2px;
+  font-size: 17px;
+}
+
+.muted.small {
+  font-size: 13px;
 }
 
 .row {
